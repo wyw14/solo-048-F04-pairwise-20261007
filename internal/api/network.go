@@ -13,14 +13,16 @@ func (a *App) listZones(w http.ResponseWriter, _ *http.Request) {
 
 func (a *App) setPumpStage(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Stage int    `json:"stage"`
-		Actor string `json:"actor"`
+		Stage          int    `json:"stage"`
+		Epoch          uint64 `json:"epoch"`
+		IdempotencyKey string `json:"idempotency_key"`
+		Actor          string `json:"actor"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	zone, command, err := a.Pumps.SetStage(r.Context(), chi.URLParam(r, "zoneID"), input.Stage, input.Actor)
+	zone, command, err := a.Pumps.SetStage(r.Context(), chi.URLParam(r, "zoneID"), input.Stage, input.Epoch, input.IdempotencyKey, input.Actor)
 	if err != nil {
 		writeError(w, http.StatusConflict, err)
 		return

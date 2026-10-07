@@ -8,8 +8,20 @@ import (
 )
 
 type Candidate struct {
-	PumpStage  int  `json:"pump_stage"`
-	BypassOpen bool `json:"bypass_open"`
+	PumpStage       int    `json:"pump_stage"`
+	BypassOpen      bool   `json:"bypass_open"`
+	ControllerEpoch uint64 `json:"controller_epoch"`
+}
+
+// OldEpochError reports a command fenced out because its controller epoch
+// predates the epoch currently recorded on the zone.
+type OldEpochError struct {
+	Offered uint64
+	Current uint64
+}
+
+func (e OldEpochError) Error() string {
+	return fmt.Sprintf("controller epoch %d retired (current %d)", e.Offered, e.Current)
 }
 
 type Interlock struct {
@@ -26,7 +38,15 @@ func (i *Interlock) Snapshot(zoneID string) (Candidate, error) {
 	if !ok {
 		return Candidate{}, fmt.Errorf("zone %s not found", zoneID)
 	}
-	return Candidate{PumpStage: zone.PumpStage, BypassOpen: zone.BypassOpen}, nil
+	return Candidate{PumpStage: zone.PumpStage, BypassOpen: zone.BypassOpen, ControllerEpoch: zone.ControllerEpoch}, nil
+}
+
+func (i *Interlock) Current(zoneID string) (network.Zone, error) {
+	zone, ok := i.state.Get(zoneID)
+	if !ok {
+		return network.Zone{}, fmt.Errorf("zone %s not found", zoneID)
+	}
+	return zone, nil
 }
 
 func Validate(candidate Candidate) error {
@@ -43,7 +63,7 @@ func (i *Interlock) Transition(zoneID string, change func(Candidate) (Candidate,
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	return i.state.Update(zoneID, func(zone *network.Zone) error {
-		current := Candidate{PumpStage: zone.PumpStage, BypassOpen: zone.BypassOpen}
+		current := Candidate{PumpStage: zone.PumpStage, BypassOpen: zone.BypassOpen, ControllerEpoch: zone.ControllerEpoch}
 		candidate, err := change(current)
 		if err != nil {
 			return err
@@ -53,13 +73,18 @@ func (i *Interlock) Transition(zoneID string, change func(Candidate) (Candidate,
 		}
 		zone.PumpStage = candidate.PumpStage
 		zone.BypassOpen = candidate.BypassOpen
+		zone.ControllerEpoch = candidate.ControllerEpoch
 		return nil
 	})
 }
 
-func (i *Interlock) StagePump(zoneID string, stage int) (network.Zone, error) {
+func (i *Interlock) StagePump(zoneID string, stage int, epoch uint64) (network.Zone, error) {
 	return i.Transition(zoneID, func(candidate Candidate) (Candidate, error) {
+		if epoch < candidate.ControllerEpoch {
+			return candidate, OldEpochError{Offered: epoch, Current: candidate.ControllerEpoch}
+		}
 		candidate.PumpStage = stage
+		candidate.ControllerEpoch = epoch
 		return candidate, nil
 	})
 }

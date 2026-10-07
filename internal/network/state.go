@@ -26,6 +26,7 @@ type Zone struct {
 	SupplyPressure   float64   `json:"supply_pressure"`
 	ReturnPressure   float64   `json:"return_pressure"`
 	RecoveryRevision uint64    `json:"recovery_revision"`
+	ControllerEpoch  uint64    `json:"controller_epoch"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
