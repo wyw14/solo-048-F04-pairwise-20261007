@@ -21,6 +21,14 @@ func NewInterlock(state *network.State) *Interlock {
 	return &Interlock{state: state}
 }
 
+func (i *Interlock) Zone(zoneID string) (network.Zone, error) {
+	zone, ok := i.state.Get(zoneID)
+	if !ok {
+		return network.Zone{}, fmt.Errorf("zone %s not found", zoneID)
+	}
+	return zone, nil
+}
+
 func (i *Interlock) Snapshot(zoneID string) (Candidate, error) {
 	zone, ok := i.state.Get(zoneID)
 	if !ok {
